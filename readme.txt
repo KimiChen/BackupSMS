@@ -18,6 +18,7 @@ Code might be tested in the following machines:
 
 According to the aforementioned announcement, I believe you’ve fully realized that I’m so honored a man of my principle which guided by my mood.
 
+--------------------------------------------------------------------------------------
 
 iPhone版本的已经开发完毕
 测试样机：
@@ -37,3 +38,14 @@ Symbian在计划中，开发时间看心情
 	E72
 
 我相信你已经看懂了，我是一个很有原则的人，我的原则就是看心情。
+
+
+
+
+
+
+
+
+
+
+Copyleft by Kimi
