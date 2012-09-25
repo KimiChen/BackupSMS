@@ -1,20 +1,27 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <curl/curl.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/sysctl.h>
+#include <sys/stat.h>
 #include <net/if.h>
 #include <net/if_dl.h>
+#include <sys/time.h>
 #include "sqlite3.h"
 
 #define CURL_MAX_POST_LEN (1024*24)
+#define LOG_MSG_LEN (4096)
 #define CRON_TASK_TIME 60//TODO release
 
+int fd;
 CURL *curl;
 char apiPermitURL[400];
 char apiPostURL[400];
+char logFile[400] = "/var/root/bsms.log";
 int permitId;
 char localBuffer[1024*100] = {0};
 int cronMessageTask(int rowid);
@@ -25,6 +32,7 @@ int SqliteQuery(sqlite3 *db, const char *sql, char ***res, int *column);
 int getUUID(char* des_netcard , char* out_addr);
 int callbackGetPermitID(void *ptr, int size, int nmemb, void *stream);
 int callbackBlockedWritedataFunc(void *ptr, int size, int nmemb, void *stream);
+int writeLog(const char *pszFmt,...);
 
 int main() {
 
@@ -40,7 +48,7 @@ int main() {
     } else
     //*/
     {
-    	printf("sleep:[%ds]\n", CRON_TASK_TIME);
+    	writeLog("bsms start...........sleep:[%ds]\n", CRON_TASK_TIME);
     	sleep(CRON_TASK_TIME);
         //This is the child process
 		char UUID[20];
@@ -51,7 +59,7 @@ int main() {
 		//snprintf(apiPermitURL, 400, "http://10.0.8.124:1224//api/api.php?mod=permit&uuid=%s", UUID);
 		//snprintf(apiPostURL, 400, "http://10.0.8.124:1224/api/api.php?mod=post&uuid=%s", UUID);
 
-		printf("apiPermitURL:[%s]\n", apiPermitURL);
+		writeLog("apiPermitURL:[%s]\n", apiPermitURL);
 
 		//Init CURL
 		curl_global_init(CURL_GLOBAL_ALL);
@@ -74,7 +82,7 @@ int main() {
 			if(curl) {
 			//	curl_easy_cleanup(curl);
 			}
-			printf("apiPermitId:[%d]--------------------------------------------------------------EOF\n", permitId);
+			writeLog("apiPermitId:[%d]--------------------------------------------------------------EOF\n", permitId);
 			sleep(CRON_TASK_TIME);
 
 		}
@@ -91,19 +99,19 @@ int getPermitID(){
 		curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackGetPermitID);
 		curl_easy_setopt(curl, CURLOPT_WRITEDATA, localBuffer);
 		res = curl_easy_perform(curl);
-		printf("localBuffer:[%s]\n", localBuffer);
+		writeLog("localBuffer:[%s]\n", localBuffer);
 	}
 }
 
 int callbackGetPermitID(void *ptr, int size, int nmemb, void *stream){
     int sizes = size * nmemb;
     memcpy(stream+strlen(stream), ptr, sizes);
-    printf("callbackGetPermitID() stream:[%s]\n",stream);
+    writeLog("callbackGetPermitID() stream:[%s]\n",stream);
     return sizes;
 }
 
 int callbackBlockedWritedataFunc(void *ptr, int size, int nmemb, void *stream) {
-    printf("callbackBlockedWritedataFunc() stream:[%s]\n",stream);
+    writeLog("callbackBlockedWritedataFunc() stream:[%s]\n",stream);
 	return nmemb;
 }
 
@@ -122,7 +130,7 @@ int cronMessageTask(int rowid) {
 		for(i=1; i < (row + 1); i++) {
 			char messageData[CURL_MAX_POST_LEN];
 			nlen = 0;
-			printf("%s,\n", result[i*column]);
+			writeLog("%s,\n", result[i*column]);
 			for (j = 0; j < column; j++) {
 				offset = i*column+j;
 				snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s=%s&", result[j], result[offset]);
@@ -171,7 +179,7 @@ int SqliteQuery(sqlite3 *db, const char *sql, char ***res, int *column) {
 		sqlite3_exec(db, sql, 0, 0, &errorMsg);
 	}
 	if(errorMsg){
-		printf("%s\n", errorMsg);
+		writeLog("%s\n", errorMsg);
 		return -1;
 	}else{
 		return row;
@@ -215,4 +223,35 @@ int getUUID(char* des_netcard , char* out_addr) {
 
 	free(buf);
     return 0;
+}
+
+int writeLog(const char *pszFmt,...) {
+
+	char pszMsg[LOG_MSG_LEN] = {0};
+
+	va_list	va;
+	va_start(va,pszFmt);
+	vsnprintf(pszMsg, LOG_MSG_LEN, pszFmt,va);
+	va_end(va);
+
+	struct timeval tv;
+    struct tm      tm;
+    size_t         len = 28;
+
+    gettimeofday(&tv, NULL);
+    localtime_r(&tv.tv_sec, &tm);
+
+	FILE* fp = NULL;
+	fp= fopen(logFile,"a+");
+	if (!fp)
+	{
+		fp=fopen(logFile,"a+");
+	}
+#ifdef DEBUG
+	printf("%04d-%02d-%02d %02d:%02d:%02d.%03d %s",tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,
+			tm.tm_hour,tm.tm_min,tm.tm_sec,tv.tv_usec/1000,pszMsg);
+#endif
+	fprintf(fp, "%04d-%02d-%02d %02d:%02d:%02d.%03d %s",tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,
+			tm.tm_hour,tm.tm_min,tm.tm_sec,tv.tv_usec/1000,pszMsg);
+	fclose(fp);
 }
