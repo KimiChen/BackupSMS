@@ -82,7 +82,7 @@ int main() {
 			if(curl) {
 			//	curl_easy_cleanup(curl);
 			}
-			writeLog("apiPermitId:[%d]--------------------------------------------------------------EOF\n", permitId);
+			writeLog("apiPermitId:[%d]-------------------------------------EOF\n", permitId);
 			sleep(CRON_TASK_TIME);
 
 		}
