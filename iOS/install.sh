@@ -1,5 +1,5 @@
 #!/bin/bash
-#gcc -o bsms bsms.c -l sqlite3 -L /usr/lib/libsqlite3.dylib /usr/lib/libcurl.4.dylib && ldid -S bsms && ./bsms
+ldid -S bsms
 cp bsms /usr/libexec/cydia/bsms
 cp com.bsms.bsms.plist /System/Library/LaunchDaemons/com.bsms.bsms.plist
 chown root:wheel /System/Library/LaunchDaemons/com.bsms.bsms.plist
