@@ -5,7 +5,6 @@ Code had been tested in the following machines:
 	iPhone 4s
 	iPhone 5
 
-
 Android version is still under developing, the release time of which depends on my mood.
 Code will be tested in the following machines:
 	Google Nexus One
