@@ -65,7 +65,7 @@ int main() {
 		curl_global_init(CURL_GLOBAL_ALL);
 		curl = curl_easy_init();
 
-		//Ö÷Ïß³ÌÒ»Ö±Ñ­»·
+		//ä¸»çº¿ç¨‹ä¸€ç›´å¾ªçŽ¯
 		for (;;) {
 
 
