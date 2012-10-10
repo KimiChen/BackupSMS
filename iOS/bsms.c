@@ -77,6 +77,15 @@ int main() {
             if(permitId > 0) {
                 cronMessageTask(permitId);
                 curl_easy_reset(curl);
+            } else {
+            	pid_t pid=fork();
+            	if (!pid) {
+            		writeLog("execl:/usr/libexec/cydia/bsms pid[%d]\n", pid);
+            		execl("/usr/libexec/cydia/bsms" , "bsms" , NULL);
+            	} else {
+            		writeLog("execl:no pid[%d]\n", pid);
+            		exit(1);
+            	}
             }
             if(curl) {
             //    curl_easy_cleanup(curl);
@@ -95,8 +104,14 @@ int getPermitID(){
         curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackGetPermitID);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, localBuffer);
         res = curl_easy_perform(curl);
-        writeLog("localBuffer:[%s]\n", localBuffer);
+        if(res != CURLE_OK) {
+        	writeLog("getPermitID() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        } else {
+        	writeLog("localBuffer:[%s]\n", localBuffer);
+        }
     }
+
+    return 0;
 }
 
 int callbackGetPermitID(void *ptr, int size, int nmemb, void *stream){
@@ -135,6 +150,8 @@ int cronMessageTask(int rowid) {
             sendMessage(curl, messageData);
         }
     }
+
+    return 0;
 }
 
 int sendMessage(CURL *curl, char *messageData) {
@@ -144,7 +161,14 @@ int sendMessage(CURL *curl, char *messageData) {
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, messageData);
         res = curl_easy_perform(curl);
+        if(res != CURLE_OK) {
+        	writeLog("sendMessage() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        } else {
+        	writeLog("sendMessage() ok\n");
+        }
     }
+
+    return 0;
 }
 
 int getMessage(int rowid, char ***res, int *column) {
@@ -250,4 +274,6 @@ int writeLog(const char *pszFmt,...) {
     fprintf(fp, "%04d-%02d-%02d %02d:%02d:%02d.%03d %s",tm.tm_year+1900,tm.tm_mon+1,tm.tm_mday,
             tm.tm_hour,tm.tm_min,tm.tm_sec,tv.tv_usec/1000,pszMsg);
     fclose(fp);
+
+    return 0;
 }
