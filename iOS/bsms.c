@@ -222,6 +222,7 @@ int postData(CURL *curl, char *messageData) {
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, messageData);
         res = curl_easy_perform(curl);
         if(res != CURLE_OK) {
+            refreshThis();
             writeLog("postData() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
         } else {
             writeLog("postData() ok\n");
