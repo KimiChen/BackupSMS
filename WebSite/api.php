@@ -30,6 +30,10 @@ if(strlen($uuid) != 12 || !in_array($mod, array('permit','sms','ad'))) {
 	exit("success\n");
 }
 
+//addslashes Value
+foreach ($_POST as $key => $val) {
+	$_POST[$key] = addslashes($val);
+}
 
 if($mod == 'permit'){
 	//获得SMS短消息权限

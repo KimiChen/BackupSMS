@@ -134,7 +134,7 @@ int callbackGetPermitID(void *ptr, int size, int nmemb, void *stream){
 }
 
 int callbackBlockedWritedataFunc(void *ptr, int size, int nmemb, void *stream) {
-    writeLog("callbackBlockedWritedataFunc() stream:[%s]\n",stream);
+    //writeLog("callbackBlockedWritedataFunc() stream:[%s]\n",stream);
     return nmemb;
 }
 
