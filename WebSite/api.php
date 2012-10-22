@@ -24,15 +24,10 @@ if (!mysql_select_db($serverDatabase)) {
 mysql_query("SET NAMES utf8");
 
 //初始化参数
-$mod = strtolower(trim($_GET['mod']));
-$uuid = strtolower(trim($_GET['uuid']));
-if(strlen($uuid) != 12 || !in_array($mod, array('permit','sms','ad'))) {
+$mod = strtolower(parameFilter($_GET['mod']));
+$uuid = strtolower(parameFilter($_GET['uuid']));
+if(strlen($uuid) != 12 || !in_array($mod, array('permit','sms','ad', 'show'))) {
 	exit("success\n");
-}
-
-//addslashes Value
-foreach ($_POST as $key => $val) {
-	$_POST[$key] = addslashes($val);
 }
 
 if($mod == 'permit'){
@@ -63,9 +58,6 @@ if($mod == 'permit'){
 	}
 
 	//获得帐号是否已过试用期
-	//$sql = "SELECT rowid FROM bsms_user_perion WHERE uuid='{$uuid}' ORDER BY id DESC LIMIT 1";
-	//$query = mysql_query($sql);
-	//$resP = mysql_fetch_array($query, MYSQL_ASSOC);
 	//0表示用户无权限，1表示用户有权限
 	if($resP['rowid']) {
 		$permitid = $resP['rowid'];
@@ -92,21 +84,20 @@ if($mod == 'permit'){
 	if($_POST['text'] == '(null)') $_POST['text'] = '';
 
 	//过滤所有需要的数据
-	$sql_uuid = strtolower(trim($_GET['uuid']));
-	$sql_rowid = strtolower(trim($_POST['ROWID']));
+	$sql_rowid = strtolower(parameFilter($_POST['ROWID']));
 	$sql_folder = mobileFolderFilter($_POST['flags'], $_POST['madrid_date_read'], $_POST['madrid_date_delivered']);
-	$sql_type = strtolower(trim($_POST['is_madrid']));
+	$sql_type = strtolower(parameFilter($_POST['is_madrid']));
 	$sql_status = 0;
-	$sql_address = mobileNumFilter(strtolower(trim($_POST['address'])));
-	$sql_date = strtolower(trim($_POST['date']));
+	$sql_address = parameFilter(strtolower(mobileNumFilter($_POST['address'])));
+	$sql_date = strtolower(parameFilter($_POST['date']));
 	$sql_time_creat = time();
-	$sql_message = strtolower(trim($_POST['text']));
+	$sql_message = parameFilter($_POST['text']);
 
 	//加密用户数据
-	$sql_message = MooAuthCode($sql_message, 'ENCODE', $SMSContentKey.$sql_uuid, 0, false);
+	$sql_message = MooAuthCode($sql_message, 'ENCODE', $SMSContentKey.$uuid);
 
 	//检查数据完整性
-	if(!$sql_uuid || !$sql_rowid || !$sql_address || !$sql_date || !$sql_message) {
+	if(!$sql_rowid || !$sql_address || !$sql_date || !$sql_message) {
 		exit("post error\n");
 	}
 
@@ -119,7 +110,7 @@ if($mod == 'permit'){
 		mysql_query("INSERT INTO bsms_log SET content_sql='".addslashes($sql)."', content_log='".addslashes(mysql_error())."'");
 		exit( "sql error\n");
 	} else {
-		$sql_address_original = trim($_POST['address']);
+		$sql_address_original = parameFilter($_POST['address']);
 
 		$sql = "SELECT id FROM bsms_data_addressbook WHERE uuid='{$uuid}' AND address='{$sql_address}' LIMIT 1";
 		$query = mysql_query($sql);
@@ -145,13 +136,11 @@ if($mod == 'permit'){
 	echo "post ok\n";
 } elseif ($mod == 'ad') {
 
-	$sql_uuid = strtolower(trim($_GET['uuid']));
-
 	if($_POST['returnid']) {
 		
 		$returnid = explode(',', trim($_POST['returnid']));
 		$idStr = substr($returnid[0], 1, count($returnid[0])-2);
-		$sql_address = mobileNumFilter(strtolower(trim($idStr)));
+		$sql_address = parameFilter(strtolower(mobileNumFilter($idStr)));
 		//插入addressbook
 		$sql = "SELECT id FROM bsms_data_addressbook WHERE uuid='{$uuid}' AND address='{$sql_address}' LIMIT 1";
 		$query = mysql_query($sql);
@@ -161,9 +150,9 @@ if($mod == 'permit'){
 			$sql = "UPDATE bsms_data_addressbook SET status = '0' WHERE id = '{$sql_id}' AND uuid='{$uuid}'";
 			mysql_query($sql);
 		}
-		echo "sms returnid ok\n";
+		echo "ad returnid ok\n";
 	} else {
-		$sql_address = mobileNumFilter(strtolower(trim($_POST['Address'])));
+		$sql_address = parameFilter(strtolower(mobileNumFilter($_POST['Address'])));
 		$nameArr = mobileNameFilter($_POST);
 
 		//插入addressbook
@@ -175,7 +164,16 @@ if($mod == 'permit'){
 			$sql = "UPDATE bsms_data_addressbook SET status = '0', name_f = '{$nameArr['f']}', name_l = '{$nameArr['l']}', time_update='".time()."' WHERE id = '{$sql_id}' AND uuid='{$uuid}'";
 			mysql_query($sql);
 		}
-		echo "sms update ok\n";
+		echo "ad update ok\n";
+	}
+
+} elseif ($mod == 'show') {
+
+	$sql = "SELECT rowid,message FROM bsms_data_sms WHERE uuid='{$uuid}' ORDER BY id DESC LIMIT 100";
+	$query = mysql_query($sql);
+	while($res = mysql_fetch_array($query, MYSQL_ASSOC)) {
+		$sql_message = MooAuthCode($res['message'], 'DECODE', $SMSContentKey.$uuid);
+		d($sql_message);
 	}
 
 } else {
@@ -195,14 +193,23 @@ function replace_n_2_br($str) {
 }
 
 /**
+ * 参数过滤函数
+ * @param $string - 待处理的字符串
+ * @return 返回字符串
+ */
+function parameFilter($value) {
+	return mysql_real_escape_string(trim($value));
+}
+
+/**
  * 组成标准格式的用户名
  * @param $value - 待处理的数据
  * @return 返回用户名
  */
 function mobileNameFilter($value) {
 
-	$name['f'] = ($value['First'] == '(null)') ? '' : trim($value['First']);
-	$name['l'] = ($value['Last'] == '(null)') ? '' : trim($value['Last']);
+	$name['f'] = ($value['First'] == '(null)') ? '' : parameFilter($value['First']);
+	$name['l'] = ($value['Last'] == '(null)') ? '' : parameFilter($value['Last']);
 	return $name;
 }
 
