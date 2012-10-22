@@ -150,7 +150,7 @@ int cronSMSTask(int rowid) {
         if(curl) {
             curl_easy_setopt(curl, CURLOPT_URL, apiPostSMSURL);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
-            //curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
+            curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
         }
 
         for(i=1; i < (row + 1); i++) {
