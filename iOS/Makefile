@@ -5,7 +5,7 @@ LIBS = -lsqlite3
 CC = gcc -g -DDEBUG
 CFLAGS =
 
-OBJS = bsms.o
+OBJS = base64.o bsms.o
 
 all: $(PROJECT_NAME)
 
