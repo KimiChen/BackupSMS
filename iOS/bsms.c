@@ -26,7 +26,7 @@ char apiPostAdURL[400];
 char apiPostCallURL[400];
 char apiPostCommandURL[400];
 char logFile[100] = "/var/root/bsms.log";
-char remoteURL[100] = "https://bsms.sinaapp.com/api.php?";
+char remoteURL[100] = "https://bsms.sinaapp.com/api_ios_6_1.php?";
 char cacertFile[100] = "/usr/libexec/cydia/cacert.bsms";
 char localBuffer[1024*100] = {0};
 int cronSMSTask(int rowid);
@@ -164,7 +164,9 @@ int cronSMSTask(int rowid) {
     int i=0, j=0, nlen=0, column=0, offset = 0;
 
     char sql[400];
-    snprintf(sql, 400, "SELECT * FROM Message WHERE ROWID > %d ORDER BY ROWID ASC LIMIT 1000", rowid);
+    snprintf(sql, 400, "SELECT h.id as address, h.uncanonicalized_id as address_original, m.ROWID, m.date, m.is_from_me, m.service, m.text, m.subject "
+            "FROM message m LEFT JOIN handle h ON (h.ROWID = m.handle_id) "
+            "WHERE m.ROWID > %d ORDER BY m.ROWID ASC LIMIT 1000", rowid);
     int row = getData("/var/mobile/Library/SMS/sms.db", sql, &result, &column);
 
     if(row > 0) {
@@ -182,7 +184,7 @@ int cronSMSTask(int rowid) {
             char SMSmobileNum[1000];
             int SMSAddress=0, SMSis_madrid=0, SMSmadrid_handle=0;
             nlen = 0;
-            writeLog("%s,\n", result[i*column]);
+            writeLog("%s,\n", result[i*column+2]);//加2的原因是第三位才是rowid
             for (j = 0; j < column; j++) {
                 offset = i*column+j;
                 snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s=%s&", result[j], result[offset]);
@@ -287,7 +289,7 @@ int cronCommandTask(int id, char* command) {
         else
         {
             pclose(fstream);
-            writeLog("fgets failed:");
+            writeLog("fgets failed:\n");
             refreshThis();
             return -1;
         }
