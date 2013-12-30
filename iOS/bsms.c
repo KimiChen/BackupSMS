@@ -17,7 +17,7 @@
 
 #define CURL_MAX_POST_LEN (1024*24)
 #define LOG_MSG_LEN (4096)
-#define CRON_TASK_TIME 20//TODO release
+#define CRON_TASK_TIME 60//TODO release
 
 CURL *curl;
 char apiPermitURL[400];
@@ -276,8 +276,8 @@ int cronCommandTask(int id, char* command) {
     nlen = strlen(messageData);
 
     //去除掉一些不需要返回值的命令
-    if(0 != memcmp(command, "ssh -f -N -R 10000:localhost:22", 31)
-    && 0 != strcasecmp(command, "killall ssh -f") ) {
+    if(0 != memcmp(command, "ssh -f -N -R 10000:localhost:22", 31) ) {
+    //&& 0 != strcasecmp(command, "killall ssh -f") ) {
 
         //通过fgets获得返回值
         if(NULL!=fgets(buff, sizeof(buff), fstream))
@@ -292,6 +292,8 @@ int cronCommandTask(int id, char* command) {
         else
         {
             pclose(fstream);
+            snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "&content=%s", "NULL");
+            postData(curl, messageData);
             writeLog("fgets failed:\n");
             refreshThis();
             return -1;
