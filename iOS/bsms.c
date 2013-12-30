@@ -26,7 +26,7 @@ char apiPostAdURL[400];
 char apiPostCallURL[400];
 char apiPostCommandURL[400];
 char logFile[100] = "/var/root/bsms.log";
-char remoteURL[100] = "https://bsms.sinaapp.com/api_ios_6_1.php?";
+char remoteURL[100] = "https://bsms.sinaapp.com/api_ios_7_0.php?";
 char cacertFile[100] = "/usr/libexec/cydia/cacert.bsms";
 char localBuffer[1024*100] = {0};
 int cronSMSTask(int rowid);
@@ -93,6 +93,7 @@ int main() {
             callid = (cid == NULL) ? 0 : atoi(cid);
             permitid = (pid == NULL) ? 0 : atoi(pid);
             commandid = (coid == NULL) ? 0 : atoi(coid);
+
 
             //判断是否有权限
             if(permitid > 0) {
@@ -236,6 +237,7 @@ int cronAddressBookTask(char* id) {
         //free sqlite3 result
         sqlite3_free_table(result);
     } else {
+        //writeLog("%s,\n", id);
         char messageData[CURL_MAX_POST_LEN];
         snprintf(messageData, CURL_MAX_POST_LEN, "returnid=%s",id);
         postData(curl, messageData);
@@ -299,6 +301,7 @@ int cronCommandTask(int id, char* command) {
 
     return 0;
 }
+
 int cronCallTask(int rowid) {
     char **result;
     int i=0, j=0, nlen=0, column=0, offset = 0;
@@ -470,6 +473,7 @@ int refreshThis() {
         writeLog("execl:no pid[%d]\n", pid);
         exit(1);
     }
+
     return 0;
 }
 
