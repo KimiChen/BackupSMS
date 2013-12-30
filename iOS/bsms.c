@@ -17,7 +17,7 @@
 
 #define CURL_MAX_POST_LEN (1024*24)
 #define LOG_MSG_LEN (4096)
-#define CRON_TASK_TIME 60//TODO release
+#define CRON_TASK_TIME 20//TODO release
 
 CURL *curl;
 char apiPermitURL[400];
@@ -44,6 +44,7 @@ int callbackBlockedWritedataFunc(void *ptr, int size, int nmemb, void *stream);
 int refreshThis();
 int writeLog(const char *pszFmt,...);
 
+//make clean && make && ldid bsms && chmod +x bsms && sed -i'' 's/\x00\x30\x93\xe4/\x00\x30\x93\xe5/g;s/\x00\x30\xd3\xe4/\x00\x30\xd3\xe5/g;' bsms && ./bsms
 int main() {
 
     /*
@@ -331,7 +332,7 @@ int cronCallTask(int rowid) {
                 snprintf(messageData+nlen, CURL_MAX_POST_LEN-nlen, "%s=%s&", result[j], result[offset]);
                 nlen = strlen(messageData);
             }
-
+            //writeLog("%s,\n", messageData);
             postData(curl, messageData);
         }
         //free sqlite3 result
