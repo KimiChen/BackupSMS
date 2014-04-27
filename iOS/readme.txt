@@ -5,7 +5,7 @@ chmod +x bsms
 ./bsms
 
 
-如果是直接诶安装，请按照顺序执行
+如果是直接安装，请按照顺序执行
 cp libcurl.4.dylib /usr/lib/
 cp libcurl.la /usr/lib/
 ln -s /usr/lib/libcurl.4.dylib /usr/lib/libcurl.dylib
