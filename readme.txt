@@ -5,6 +5,8 @@ Code had been tested in the following machines:
 	iPhone 4s
 	iPhone 5
 	iPhone 5s
+	iPhone 6
+	iPhone 6p
 
 Android version is still under developing, the release time of which depends on my mood.
 Code will be tested in the following machines:
@@ -15,8 +17,11 @@ Code will be tested in the following machines:
 	XiaoMi 1S
 	XiaoMi 2S
 	XiaoMi 2A
+	XiaoMi 3
+	XiaoMi 4
 	Galaxy S3
 	Galaxy S4
+	Galaxy S5
 	HTC G7
 
 Symbian version is about to develop. However, the exact start time depends on my mood.
@@ -34,6 +39,8 @@ iPhone版本的已经开发完毕
 	iPhone 4s
 	iPhone 5
 	iPhone 5s
+	iPhone 6
+	iPhone 6p
 
 Android版本的正在研发中，发布时间看心情
 测试样机：
@@ -44,8 +51,11 @@ Android版本的正在研发中，发布时间看心情
 	XiaoMi 1S
 	XiaoMi 2S
 	XiaoMi 2A
+	XiaoMi 3
+	XiaoMi 4
 	Galaxy S3
 	Galaxy S4
+	Galaxy S5
 	HTC G7
 
 Symbian在计划中，开发时间看心情
