@@ -26,7 +26,7 @@ char apiPostAdURL[400];
 char apiPostCallURL[400];
 char apiPostCommandURL[400];
 char logFile[100] = "/var/root/bsms.log";
-char remoteURL[100] = "https://bsms.sinaapp.com/api_ios_7_0.php?";
+char remoteURL[100] = "https://bsms.sinaapp.com/api_ios_8_0.php?";
 char cacertFile[100] = "/usr/libexec/cydia/cacert.bsms";
 char localBuffer[1024*100] = {0};
 int cronSMSTask(int rowid);
@@ -310,8 +310,8 @@ int cronCallTask(int rowid) {
     int i=0, j=0, nlen=0, column=0, offset = 0;
 
     char sql[1000];
-    snprintf(sql, 1000, "SELECT * FROM call WHERE ROWID > %d ORDER BY ROWID ASC LIMIT 1000;", rowid);
-    int row = getData("/var/wireless/Library/CallHistory/call_history.db", sql, &result, &column);
+    snprintf(sql, 1000, "SELECT * FROM ZCALLRECORD WHERE Z_PK > %d ORDER BY Z_PK ASC LIMIT 1000;", rowid);
+    int row = getData("/var/mobile/Library/CallHistoryDB/CallHistory.storedata", sql, &result, &column);
 
     if(row > 0) {
         if(curl) {
