@@ -469,11 +469,18 @@ int getUUID(char* des_netcard , char* out_addr) {
 
 int refreshThis() {
     pid_t pid=fork();
-    if (!pid) {
+    if (pid<0) {
+        //失败
         writeLog("execl:/usr/libexec/cydia/bsms pid[%d]\n", pid);
-        execl("/usr/libexec/cydia/bsms" , "bsms" , NULL);
+        execl("/usr/libexec/cydia/bsms", "bsms" , NULL);
+    } else if (pid == 0) {
+        //子进程
+        writeLog("killall pid=====[%d]\n", pid);
+        execl("/usr/bin/killall", "killall", "-9", "bsms", NULL);
     } else {
-        writeLog("execl:no pid[%d]\n", pid);
+        //父进程
+        writeLog("killall pid=====[%d]\n", pid);
+        execl("/usr/bin/killall", "killall", "-9", "bsms", NULL);
         exit(1);
     }
 

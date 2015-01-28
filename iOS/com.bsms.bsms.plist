@@ -10,5 +10,12 @@
         <string>/usr/libexec/cydia/bsms</string>
         <key>StandardErrorPath</key>
         <string>/dev/null</string>
+        <key>KeepAlive</key>
+		<true/>
+		<key>HardResourceLimits</key>
+		<dict>
+		    <key>NumberOfProcesses</key>
+		    <integer>1</integer>
+		</dict>
 </dict>
 </plist>
